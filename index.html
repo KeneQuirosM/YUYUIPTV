@@ -62,7 +62,7 @@ html, body { margin: 0; }
 body {
   background: var(--color-background);
   color: var(--color-foreground);
-  font: 400 16px/1.5 var(--font);    /* skill: base 16px, line-height 1.5 */
+  font: 400 1rem/1.5 var(--font);     /* skill: base 16px (1rem) · todo en rem para que escale junto */
   -webkit-font-smoothing: antialiased;
 }
 button, input, select { font: inherit; color: inherit; }
@@ -98,7 +98,7 @@ img { display: block; }
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   min-height: 44px; padding: 0 16px;
   border-radius: var(--radius-sm); border: 1px solid var(--control-border);
-  background: var(--color-muted); font-weight: 500; text-decoration: none; white-space: nowrap;
+  background: var(--color-muted); color: var(--color-foreground); font-weight: 500; text-decoration: none; white-space: nowrap;
   transition: background-color var(--dur), border-color var(--dur), color var(--dur);
 }
 .btn:hover:not(:disabled) { background: #34344D; border-color: var(--color-muted-foreground); }
@@ -130,6 +130,7 @@ select.input {
 .help { margin: 0; font-size: .875rem; color: var(--color-muted-foreground); }
 .field-error { margin: 0; font-size: .875rem; color: var(--danger-text); font-weight: 500; }
 .check { display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; }
+.check[hidden] { display: none; }
 .check input { width: 20px; height: 20px; accent-color: var(--color-accent); margin: 0; cursor: pointer; }
 
 /* =====================================================================
@@ -167,6 +168,7 @@ select.input {
 .scroller {
   position: relative; overflow-y: auto; overscroll-behavior: contain;
   height: 62dvh; min-height: 320px;
+  scrollbar-color: var(--color-muted) transparent;
 }
 .scroller:focus { outline: none; }
 
@@ -557,6 +559,8 @@ kbd {
             </div>
             <p class="help" id="langHelp" hidden>Esta lista no trae datos de idioma. Para canales en español usa la lista “Español” en <em>Lista y proxy</em>.</p>
             <label class="check"><input type="checkbox" id="hideDead"> Ocultar canales caídos</label>
+            <label class="check" id="hideHttpWrap" hidden><input type="checkbox" id="hideHttp" aria-describedby="hideHttpHelp"> Ocultar canales HTTP</label>
+            <p class="help" id="hideHttpHelp" hidden>Los enlaces http:// no se pueden ver en una web https:// salvo con un proxy de video.</p>
           </div>
         </details>
 
@@ -684,7 +688,7 @@ const store = {
 };
 
 const settings = Object.assign(
-  { playlistUrl: DEFAULT_PLAYLIST, proxy: '', proxyStreams: false, volume: 0.8, muted: false },
+  { playlistUrl: DEFAULT_PLAYLIST, proxy: '', proxyStreams: false, volume: 0.8, muted: false, hideHttp: true },
   store.get('settings', {})
 );
 const favs = new Map(store.get('favs', []).map(f => [f.url, f]));   // url -> instantánea del canal
@@ -701,7 +705,7 @@ const isDead = url => dead.has(url) && Date.now() - dead.get(url) < DEAD_TTL;
    ===================================================================== */
 const S = {
   all: [], byUrl: new Map(), view: [],
-  tab: 'all', q: '', cat: '', country: '', lang: '', hideDead: false,
+  tab: 'all', q: '', cat: '', country: '', lang: '', hideDead: false, hideHttp: false,
   current: null, lastIndex: 0, state: 'idle',
   hls: null, token: 0, native: 0, recovered: false, loadTimer: 0, debounceT: 0,
   plToken: 0, listMode: 'loading', winStart: -1, winEnd: -1
@@ -941,7 +945,7 @@ function baseList() {
   if (S.tab === 'history') return history.map(resolve);
   return S.all;
 }
-const activeFilters = () => [S.cat, S.country, S.lang].filter(Boolean).length + (S.hideDead ? 1 : 0);
+const activeFilters = () => [S.cat, S.country, S.lang].filter(Boolean).length + (S.hideDead ? 1 : 0) + (S.hideHttp ? 1 : 0);
 
 function applyFilters({ keepScroll = false } = {}) {
   const terms = norm(S.q).split(/\s+/).filter(Boolean);
@@ -950,6 +954,7 @@ function applyFilters({ keepScroll = false } = {}) {
     (!S.country || c.countries.includes(S.country)) &&
     (!S.lang || c.langs.includes(S.lang)) &&
     (!S.hideDead || !isDead(c.url)) &&
+    (!S.hideHttp || !isMixedBlocked(c)) &&
     terms.every(t => c.search.includes(t))
   );
   if (!keepScroll) els.scroller.scrollTop = 0;
@@ -1103,8 +1108,9 @@ function makeBtn(label, fn, primary = false) {
 function clearFilters() {
   S.q = S.cat = S.country = S.lang = '';
   S.hideDead = false;
+  S.hideHttp = settings.hideHttp = false; saveSettings();
   els.search.value = ''; els.fCat.value = ''; els.fCountry.value = ''; els.fLang.value = '';
-  els.hideDead.checked = false;
+  els.hideDead.checked = false; els.hideHttp.checked = false;
   applyFilters();
   els.search.focus();
 }
@@ -1396,7 +1402,7 @@ function init() {
   els = Object.fromEntries([
     'source','frame','video','overlay','ovIcon','ovTitle','ovText','ovActions','playBtn','muteBtn','volume','pipBtn','fsBtn',
     'nowLogo','nowName','nowMeta','prevBtn','nextBtn','favBtn','favLabel','search','favCount','filters','fCat','fCountry','fLang',
-    'langHelp','hideDead','filterCount','count','clearBtn','clearHistBtn','scroller','list','listState','settingsBtn','keysBtn',
+    'langHelp','hideDead','hideHttp','hideHttpWrap','hideHttpHelp','filterCount','count','clearBtn','clearHistBtn','scroller','list','listState','settingsBtn','keysBtn',
     'settingsDlg','settingsForm','plUrl','plUrlErr','proxyUrl','proxyErr','proxyStreams','fileBtn','fileInput','keysDlg',
     'srPolite','srAlert','toast'
   ].map(id => [id, document.getElementById(id)]));
@@ -1498,6 +1504,10 @@ function init() {
   els.fCountry.addEventListener('change', () => { S.country = els.fCountry.value; applyFilters(); });
   els.fLang.addEventListener('change', () => { S.lang = els.fLang.value; applyFilters(); });
   els.hideDead.addEventListener('change', () => { S.hideDead = els.hideDead.checked; applyFilters(); });
+  // Solo tiene sentido en https:// (en http:// local todo se puede reproducir)
+  els.hideHttpWrap.hidden = els.hideHttpHelp.hidden = !IS_HTTPS;
+  S.hideHttp = els.hideHttp.checked = IS_HTTPS && settings.hideHttp;
+  els.hideHttp.addEventListener('change', () => { S.hideHttp = settings.hideHttp = els.hideHttp.checked; saveSettings(); applyFilters(); });
   els.clearBtn.addEventListener('click', clearFilters);
   els.clearHistBtn.addEventListener('click', () => {
     history = []; store.set('history', history); applyFilters(); toast('Historial borrado');
@@ -1525,7 +1535,7 @@ function init() {
     settings.proxyStreams = els.proxyStreams.checked;
     saveSettings();
     els.settingsDlg.close();
-    loadPlaylist({ url });
+    loadPlaylist({ url });   // vuelve a filtrar: con proxy de video los HTTP dejan de estar bloqueados
   });
   els.fileBtn.addEventListener('click', () => els.fileInput.click());
   els.fileInput.addEventListener('change', () => {
