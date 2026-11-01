@@ -743,6 +743,9 @@ const validUrl = s => { try { const u = new URL(s); return u.protocol === 'https
 function proxify(u) {
   const p = settings.proxy.trim();
   if (!p) return u;
+  // Si el proxy ya reescribió la URL (manifiestos HLS), no la envolvemos dos veces
+  const prefix = p.split('{url}')[0];
+  if (prefix && u.startsWith(prefix)) return u;
   return p.includes('{url}') ? p.replace('{url}', encodeURIComponent(u)) : p + encodeURIComponent(u);
 }
 const useStreamProxy = () => settings.proxyStreams && !!settings.proxy.trim();
